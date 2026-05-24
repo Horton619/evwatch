@@ -1,0 +1,21 @@
+{
+  "name": "evwatch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Used EV market monitor for the Pacific Northwest",
+  "author": "Visual Entropy Productions",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @evwatch/web dev",
+    "dev:desktop": "pnpm --filter @evwatch/desktop dev",
+    "build:web": "pnpm --filter @evwatch/web build",
+    "build:desktop": "pnpm --filter @evwatch/desktop build",
+    "build:mac": "pnpm --filter @evwatch/desktop build:mac",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

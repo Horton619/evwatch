@@ -1,0 +1,19 @@
+name: daily
+
+# 7am PT = 14:00 UTC (PST) / 15:00 UTC (PDT). GitHub fires cron on UTC and
+# doesn't follow DST — accepted: digest may arrive at 6am or 7am PT depending
+# on time of year.
+on:
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+jobs:
+  scrape-and-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Phase 1 placeholder
+        run: |
+          echo "evwatch daily pipeline not yet implemented."
+          echo "See SPEC §9 build sequence — wired up in Phase 2."
+          exit 0

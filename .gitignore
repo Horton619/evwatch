@@ -1,0 +1,74 @@
+# --- Node / pnpm ---
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Next.js ---
+apps/web/.next/
+apps/web/out/
+apps/web/.vercel
+apps/web/next-env.d.ts
+
+# --- Electron / electron-vite ---
+apps/desktop/out/
+apps/desktop/dist/
+apps/desktop/.eslintcache
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Playwright ---
+playwright/.cache/
+test-results/
+playwright-report/
+
+# --- Env files (NEVER COMMIT) ---
+.env
+.env.*
+!.env.example
+
+# --- Secrets / keys ---
+*.p12
+*.pem
+*.key
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Editors ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs / temp ---
+*.log
+logs/
+tmp/
+
+# --- Claude Code local state ---
+.claude/

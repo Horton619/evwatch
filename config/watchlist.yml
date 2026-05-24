@@ -1,0 +1,35 @@
+priority_models:
+  # 3-row EVs (rare, alert on any new listing)
+  - { make: Tesla,  model: "Model X", years: [2018, 2024] }
+  - { make: Kia,    model: "EV9",     years: [2024, 2026] }
+  - { make: Rivian, model: "R1S",     years: [2022, 2026] }
+  - { make: Volvo,  model: "EX90",    years: [2024, 2026] }
+  - { make: Lucid,  model: "Gravity", years: [2024, 2026] }
+
+broad_models:
+  # Large 5-seat — alert only if BELOW_MARKET or PRICE_DROP
+  - { make: Tesla,    model: "Model Y" }
+  - { make: Ford,     model: "Mustang Mach-E" }
+  - { make: Hyundai,  model: "Ioniq 5" }
+  - { make: Kia,      model: "EV6" }
+  - { make: Nissan,   model: "Ariya" }
+  - { make: Cadillac, model: "Lyriq" }
+  - { make: VW,       model: "ID.4" }
+  - { make: Ford,     model: "F-150 Lightning" }
+  - { make: Rivian,   model: "R1T" }
+  - { make: Chevrolet, model: "Silverado EV" }
+
+filters:
+  origin_zip: "98366"
+  radius_miles: 100
+  max_mileage: 80000
+  min_year: 2020
+  exclude_salvage: true
+  exclude_rebuilt: true
+
+thresholds:
+  deal_pct_below_baseline: 0.15
+  price_drop_min_dollars: 500
+  price_drop_min_pct: 0.03
+  min_baseline_comps: 6           # was 8 in v1, lowered for 1wk firehose
+  firehose_days: 7                # all matching listings emailed for first week
