@@ -1,8 +1,8 @@
 name: daily
 
 # 7am PT = 14:00 UTC (PST) / 15:00 UTC (PDT). GitHub fires cron on UTC and
-# doesn't follow DST — accepted: digest may arrive at 6am or 7am PT depending
-# on time of year.
+# doesn't follow DST — accepted: digest arrives at 6am or 7am PT depending
+# on time of year (SPEC §5.5).
 on:
   schedule:
     - cron: "0 14 * * *"
@@ -11,9 +11,42 @@ on:
 jobs:
   scrape-and-digest:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+      EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EVWATCH_DIGEST_FROM: ${{ vars.EVWATCH_DIGEST_FROM || 'noreply@veproductions.net' }}
+      EVWATCH_DIGEST_TO: ${{ vars.EVWATCH_DIGEST_TO || 'dave@veproductions.net' }}
+      EVWATCH_DASHBOARD_URL: ${{ vars.EVWATCH_DASHBOARD_URL || 'https://evwatch.veproductions.net' }}
     steps:
-      - name: Phase 1 placeholder
-        run: |
-          echo "evwatch daily pipeline not yet implemented."
-          echo "See SPEC §9 build sequence — wired up in Phase 2."
-          exit 0
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install evwatch
+        run: pip install -e .
+
+      - name: Scrape eBay
+        run: python -m scrapers.ebay
+        continue-on-error: false
+
+      - name: Detect deals
+        run: python -m pipeline.detect_deals
+        continue-on-error: false
+
+      - name: Send digest
+        # If there's nothing to report, send_digest exits 0 and writes no
+        # handoff file. If Resend itself fails, exit 1 — but we still want
+        # record_run to fire so source_runs gets logged.
+        run: python -m pipeline.send_digest
+        continue-on-error: true
+
+      - name: Record run
+        if: always()
+        run: python -m pipeline.record_run

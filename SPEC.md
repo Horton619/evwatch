@@ -316,7 +316,7 @@ Honest scoping: per-listing historical price data is hard to obtain cleanly. App
 3. In Supabase dashboard → Project Settings → API → add `evwatch` to **Exposed Schemas**
 4. Reuse Flux's existing `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — copy to evwatch GHA secrets + Vercel env
 5. Reuse Resend API key from Flux/Calltime — add to GHA secrets
-6. eBay developer App ID → GHA secret
+6. eBay developer App ID + Cert ID (client secret — both needed for the Browse API's OAuth2 client-credentials grant) → GHA secrets
 7. Configure Vercel project pointed at the repo (separate from Flux's Vercel deployment)
 8. Custom domain (optional): `evwatch.veproductions.net` → Vercel
 9. Mac: install Node 20, Python 3.11, Playwright Chromium
@@ -331,7 +331,11 @@ Honest scoping: per-listing historical price data is hard to obtain cleanly. App
 | `SUPABASE_SERVICE_ROLE_KEY` | GHA only | Write access from scrapers (bypasses RLS) |
 | `SUPABASE_ANON_KEY` | Vercel (server env only), Electron build | Read access via RLS policies |
 | `RESEND_API_KEY` | GHA only | Email send (shared with Flux) |
-| `EBAY_APP_ID` | GHA, Mac | eBay Browse API |
+| `EBAY_APP_ID` | GHA, Mac | eBay Browse API — OAuth2 client id |
+| `EBAY_CERT_ID` | GHA, Mac | eBay Browse API — OAuth2 client secret |
+| `EVWATCH_DIGEST_FROM` (GHA var, optional) | GHA | Sender address for the email digest. Defaults to `noreply@veproductions.net`. |
+| `EVWATCH_DIGEST_TO` (GHA var, optional) | GHA | Recipient. Defaults to `dave@veproductions.net`. |
+| `EVWATCH_DASHBOARD_URL` (GHA var, optional) | GHA | Dashboard URL in email footers. Defaults to `https://evwatch.veproductions.net`. |
 | `ARCHIVE_ORG_USER` (optional) | Mac | Higher rate limit on Wayback |
 
 **Note on `SUPABASE_ANON_KEY` in Vercel:** set as a regular server-side env var, *not* `NEXT_PUBLIC_*`. The dashboard's SSR-only design means it never needs to reach the browser.
