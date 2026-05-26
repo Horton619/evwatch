@@ -45,7 +45,7 @@ PORT_ORCHARD_ZIP = "98366"
 
 # Identifies us on HTML / RSS sources that don't take API keys. Friendly and
 # attributable so a site operator can find us if they need to.
-HTTP_USER_AGENT = "evwatch/0.1 (+https://github.com/visualentropy/evwatch)"
+HTTP_USER_AGENT = "evwatch/0.1 (+https://github.com/Horton619/evwatch)"
 
 
 # ---------------------------------------------------------------------------

@@ -92,12 +92,12 @@ export function SettingsTab({ updateStatus }: Props): React.JSX.Element {
           <div>
             Source:{' '}
             <a
-              href="https://github.com/visualentropy/evwatch"
+              href="https://github.com/Horton619/evwatch"
               target="_blank"
               rel="noopener noreferrer"
               className="text-neutral-400 hover:text-neutral-200 underline"
             >
-              github.com/visualentropy/evwatch
+              github.com/Horton619/evwatch
             </a>
           </div>
         </div>

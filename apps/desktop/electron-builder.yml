@@ -38,5 +38,5 @@ dmg:
 npmRebuild: false
 publish:
   provider: github
-  owner: visualentropy
+  owner: Horton619
   repo: evwatch
