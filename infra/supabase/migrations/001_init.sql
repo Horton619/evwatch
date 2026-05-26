@@ -94,3 +94,18 @@ create policy "anon read baselines"     on evwatch.baselines     for select usin
 create policy "anon read trends_weekly" on evwatch.trends_weekly for select using (true);
 create policy "anon read source_runs"   on evwatch.source_runs   for select using (true);
 create policy "anon read digests"       on evwatch.digests       for select using (true);
+
+-- RLS policies are necessary but not sufficient: in Supabase, when you
+-- create a schema yourself, anon + authenticated also need explicit
+-- USAGE on the schema and SELECT on the tables (Supabase's automatic
+-- grants only run for the public schema). Without these GRANTs PostgREST
+-- returns "permission denied for schema evwatch" before the RLS policy
+-- ever fires.
+grant usage on schema evwatch to anon, authenticated, service_role;
+grant select on all tables in schema evwatch to anon, authenticated;
+grant all on all tables in schema evwatch to service_role;
+grant all on all sequences in schema evwatch to service_role;
+alter default privileges in schema evwatch
+  grant select on tables to anon, authenticated;
+alter default privileges in schema evwatch
+  grant all on tables to service_role;
