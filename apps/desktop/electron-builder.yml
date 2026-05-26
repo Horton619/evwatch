@@ -26,12 +26,13 @@ mac:
   gatekeeperAssess: false
   entitlements:        build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # electron-builder v24+ requires this explicitly; absent → notarize
-  # rejects with "teamId property is required". VEP-wide Team ID per
-  # global CLAUDE.md, hardcoded so a missing env var doesn't silently
-  # turn into an undefined teamId.
-  notarize:
-    teamId: L5KZ5KGKXC
+  # electron-builder v26 dropped the object form ({teamId: ...}) and made
+  # mac.notarize a plain boolean — `true` enables notarization, `false`
+  # disables it. The teamId comes from APPLE_TEAM_ID env var, which the
+  # release workflow sets from the GHA secret. (The object form from
+  # ~/.claude/CLAUDE.md was correct for v24 but is now a validation
+  # error.)
+  notarize: true
 dmg:
   artifactName: ${name}-${version}-arm64.${ext}
 # Skipping Windows + Linux targets — evwatch is Mac-only (SPEC §5.7).
