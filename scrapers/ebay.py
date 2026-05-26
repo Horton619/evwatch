@@ -35,8 +35,7 @@ from scrapers._common import (
     _env,
     load_watchlist,
     miles_from_port_orchard,
-    record_source_run,
-    upsert_listings,
+    run_scraper,
 )
 
 SOURCE = "ebay"
@@ -392,38 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Scrape and print a summary; don't write to Supabase.",
     )
     args = parser.parse_args(argv)
-
-    started = time.time()
-    error: str | None = None
-    listings: list[Listing] = []
-    try:
-        listings = scrape({})
-    except Exception as e:
-        error = f"{type(e).__name__}: {e}"
-        print(f"[ebay] scrape failed: {error}", file=sys.stderr)
-
-    duration_ms = int((time.time() - started) * 1000)
-    print(f"[ebay] scraped {len(listings)} listings in {duration_ms} ms")
-
-    if args.dry_run:
-        for l in listings[:10]:
-            print(
-                f"  {l.year or '----'} {l.make} {l.model} | "
-                f"${l.price or '?':>6} | {l.mileage or '?'} mi | "
-                f"{l.miles_from_port_orchard or '?'}mi away | {l.url}"
-            )
-        if len(listings) > 10:
-            print(f"  ... ({len(listings) - 10} more)")
-        return 0 if error is None else 1
-
-    if listings:
-        summary = upsert_listings(listings)
-        print(
-            f"[ebay] upsert: inserted={summary['inserted']} "
-            f"updated={summary['updated']} price_changes={summary['price_changes']}"
-        )
-    record_source_run(SOURCE, duration_ms, len(listings), error=error)
-    return 0 if error is None else 1
+    return run_scraper(SOURCE, scrape, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

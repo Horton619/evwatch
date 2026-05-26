@@ -32,9 +32,46 @@ jobs:
       - name: Install evwatch
         run: pip install -e .
 
+      # Playwright browsers ~150MB. Cache to skip the download on every
+      # run. Cache key bumps automatically when the playwright version in
+      # pyproject changes (pip-cache step picks up the new requirements).
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: python -m playwright install chromium --with-deps
+
+      - name: Install Playwright system deps (on cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: python -m playwright install-deps chromium
+
+      # Each scraper is continue-on-error: a flaky source shouldn't kill
+      # the whole pipeline. Failures land in evwatch.source_runs with the
+      # error message and get surfaced by record_run at the end.
       - name: Scrape eBay
         run: python -m scrapers.ebay
-        continue-on-error: false
+        continue-on-error: true
+
+      - name: Scrape CarMax
+        run: python -m scrapers.carmax
+        continue-on-error: true
+
+      - name: Scrape Carvana
+        run: python -m scrapers.carvana
+        continue-on-error: true
+
+      - name: Scrape Craigslist
+        run: python -m scrapers.craigslist
+        continue-on-error: true
+
+      - name: Scrape AutoTempest
+        run: python -m scrapers.autotempest
+        continue-on-error: true
 
       - name: Detect deals
         run: python -m pipeline.detect_deals

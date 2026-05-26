@@ -20,11 +20,13 @@ from __future__ import annotations
 import csv
 import math
 import os
+import sys
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 from dotenv import load_dotenv
@@ -39,6 +41,10 @@ WATCHLIST_PATH = REPO_ROOT / "config" / "watchlist.yml"
 ZIP_CSV_PATH = REPO_ROOT / "scrapers" / "data" / "us_zips_pnw.csv"
 
 PORT_ORCHARD_ZIP = "98366"
+
+# Identifies us on HTML / RSS sources that don't take API keys. Friendly and
+# attributable so a site operator can find us if they need to.
+HTTP_USER_AGENT = "evwatch/0.1 (+https://github.com/visualentropy/evwatch)"
 
 
 # ---------------------------------------------------------------------------
@@ -256,3 +262,59 @@ def record_source_run(
             "error": error,
         }
     ).execute()
+
+
+# ---------------------------------------------------------------------------
+# Standard CLI runner for individual scrapers
+# ---------------------------------------------------------------------------
+
+
+def run_scraper(
+    source: str,
+    scrape_fn: Callable[[dict], list[Listing]],
+    *,
+    dry_run: bool = False,
+    filters: dict | None = None,
+) -> int:
+    """Time, run, upsert, and log one scraper. Returns process exit code.
+
+    Each ``scrapers/<name>.py:main`` boils down to::
+
+        def main(argv=None):
+            args = parser.parse_args(argv)
+            return run_scraper(SOURCE, scrape, dry_run=args.dry_run)
+    """
+    started = time.time()
+    error: str | None = None
+    listings: list[Listing] = []
+    try:
+        listings = scrape_fn(filters or {})
+    except Exception as e:  # noqa: BLE001 — top-level scraper boundary
+        error = f"{type(e).__name__}: {e}"
+        print(f"[{source}] scrape failed: {error}", file=sys.stderr)
+
+    duration_ms = int((time.time() - started) * 1000)
+    print(f"[{source}] scraped {len(listings)} listings in {duration_ms} ms")
+
+    if dry_run:
+        for l in listings[:10]:
+            print(
+                f"  {l.year or '----'} {l.make} {l.model} | "
+                f"${l.price or '?':>6} | {l.mileage or '?'} mi | "
+                f"{l.miles_from_port_orchard if l.miles_from_port_orchard is not None else '?'}mi away | {l.url}"
+            )
+        if len(listings) > 10:
+            print(f"  ... ({len(listings) - 10} more)")
+        return 0 if error is None else 1
+
+    if listings:
+        summary = upsert_listings(listings)
+        print(
+            f"[{source}] upsert: inserted={summary['inserted']} "
+            f"updated={summary['updated']} price_changes={summary['price_changes']}"
+        )
+    try:
+        record_source_run(source, duration_ms, len(listings), error=error)
+    except Exception as e:  # noqa: BLE001
+        print(f"[{source}] could not record source_run: {e}", file=sys.stderr)
+    return 0 if error is None else 1

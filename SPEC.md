@@ -80,19 +80,21 @@ Each scraper exposes `scrape(filters) -> list[Listing]` and writes via Supabase 
 | Source | Method | Notes |
 |---|---|---|
 | eBay Motors | Browse API | Free 5000 calls/day, plenty |
-| CarMax | Internal JSON `/cars/api/search` | No auth, stable |
-| Carvana | Internal JSON `/cars/search` | No auth |
-| Craigslist | RSS per region (Seattle, Tacoma, Olympia, Portland, Bellingham) | Stable, low-fi |
-| AutoTempest | HTML scrape | Aggregator — less detail per listing, broad coverage |
+| Craigslist | Playwright HTML search (RSS now 403s) per region. Seattle CL covers Tacoma/Olympia/Bellevue under its host; Portland + Bellingham are separate. | Cookies must be warmed via the regional homepage before each search |
+| AutoTempest | Playwright HTML scrape | Aggregator — less detail per listing, broad coverage; JS-rendered, so plain httpx returns empty templates |
 | iSeeCars (baseline seed only) | One-time + monthly refresh | Used for market aggregates, not per-listing |
 
-**Anti-bot protected (run from Mac app only):**
+**Anti-bot protected (run from Mac app only, residential IP):**
 
 | Source | Method | Notes |
 |---|---|---|
+| CarMax | Playwright | Cloudflare 403s every path including the homepage from datacenter IPs |
+| Carvana | Playwright | Cloudflare lets the first nav per session through, then blocks the rest |
 | CarGurus | Playwright headless Chromium | Capture their deal-rating label too — useful signal |
 | AutoTrader | Playwright | OEM-direct programs sometimes here |
 | Cars.com | Playwright (try plain requests first) | Less aggressive than CarGurus |
+
+> **Phase 3 reality update (2026-05-25):** the original spec assumed CarMax and Carvana were scrapable from GHA datacenter IPs. Empirically they are not — both Cloudflare-protect at a level that defeats plain httpx AND headless Chromium from datacenter ranges. They've been re-classified to "anti-bot protected" and deferred to Phase 6 alongside the originally-flagged Mac-only sources. Craigslist's RSS endpoint also stopped serving programmatic clients; their HTML search still works via Playwright with a session warmup.
 
 **Historical seeding (one-time, run from Mac):**
 
