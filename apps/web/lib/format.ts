@@ -45,6 +45,51 @@ export function formatYearMakeModel(
   return parts.join(" ") || "Unknown vehicle";
 }
 
+import type { DealTags } from "@evwatch/shared";
+
+export interface DealBadge {
+  label: string;
+  detail: string;
+  /** Tailwind class fragment for background+text color. */
+  color: string;
+}
+
+/**
+ * Compact badge text + color per persisted tag (SPEC §5.2). Returns the
+ * badges in display priority order: BELOW_MARKET first (most actionable),
+ * then PRICE_DROP, then NEW_PRIORITY.
+ */
+export function dealBadges(tags: DealTags | null | undefined): DealBadge[] {
+  if (!tags) return [];
+  const out: DealBadge[] = [];
+  if (tags.BELOW_MARKET) {
+    const b = tags.BELOW_MARKET;
+    const pct = Math.round(b.pct_below * 1000) / 10;
+    out.push({
+      label: "Below market",
+      detail: `${pct}% under $${b.baseline_median.toLocaleString("en-US")} (${b.comp_count} comps)`,
+      color: "bg-emerald-900/40 text-emerald-200 border-emerald-700/40",
+    });
+  }
+  if (tags.PRICE_DROP) {
+    const d = tags.PRICE_DROP;
+    const pct = Math.round(d.delta_pct * 1000) / 10;
+    out.push({
+      label: "Price drop",
+      detail: `$${Math.abs(d.delta).toLocaleString("en-US")} (${pct}%) from $${d.previous_price.toLocaleString("en-US")}`,
+      color: "bg-cyan-900/40 text-cyan-200 border-cyan-700/40",
+    });
+  }
+  if (tags.NEW_PRIORITY) {
+    out.push({
+      label: "Priority",
+      detail: "Matches priority watchlist",
+      color: "bg-orange-900/40 text-orange-200 border-orange-700/40",
+    });
+  }
+  return out;
+}
+
 export function sourceBadge(source: string): { label: string; color: string } {
   // Tailwind-like inline color tokens — these are class names, not values.
   // Used by the UI to color a small chip per source.

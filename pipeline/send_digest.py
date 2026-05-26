@@ -6,18 +6,23 @@ Persists the rendered HTML + subject + counts to :data:`HANDOFF_PATH` so
 :mod:`pipeline.record_run` (next workflow step) can write the digest row
 without re-rendering.
 
-Phase 2 quirks:
-- Only the ``NEW_PRIORITY`` section is emitted (no drops, deals, or trends).
-- Cold-start subject ``[evwatch] day N/7 — X new listings`` is used while
-  there have been fewer than 7 digests sent. After that, a basic steady
-  subject is used until later phases flesh out drops/deals.
-- ``--stub`` skips Supabase entirely and renders against fake data — used
-  to verify Resend wiring before any scrapers have run.
+Phase 5: emits three sections (Priority / Below market / Price drops).
+The digest is filtered to recently-relevant tags only — detect_deals
+also writes tags for older listings so the dashboard can show them, but
+the digest only mentions:
 
-Exit codes:
-- ``0`` — sent successfully (or skipped cleanly because there was nothing
-  to report)
-- ``1`` — render/send failed
+- NEW_PRIORITY: ``first_seen_at`` in last 24h (already filtered)
+- BELOW_MARKET: ``first_seen_at`` in last 24h (re-filtered here so we
+  don't email about the same below-market car every day)
+- PRICE_DROP: latest ``price_history.observed_at`` in last 24h (already
+  filtered by detect_deals)
+
+Cold-start subject ``[evwatch] day N/7 — X new listings`` is used until
+seven digests have shipped; then it switches to the steady-state
+``[evwatch] 2 priority, 4 deals, 6 drops``.
+
+``--stub`` skips Supabase entirely and renders against fake data so
+Resend wiring can be verified without scrapes.
 """
 
 from __future__ import annotations
@@ -33,7 +38,13 @@ from typing import Any
 import httpx
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from pipeline.detect_deals import NEW_PRIORITY, TaggedListing, detect
+from pipeline.detect_deals import (
+    BELOW_MARKET,
+    NEW_PRIORITY,
+    PRICE_DROP,
+    TaggedListing,
+    detect,
+)
 from scrapers._common import _env, get_supabase
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,8 +56,6 @@ DASHBOARD_URL = os.environ.get(
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 # Hand-off file read by pipeline.record_run in the next workflow step.
-# Lives outside the repo so it doesn't risk getting committed. On GHA we
-# prefer $RUNNER_TEMP (auto-cleaned between runs).
 HANDOFF_PATH = Path(
     os.environ.get("EVWATCH_DIGEST_HANDOFF")
     or (Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "evwatch-digest.json")
@@ -61,10 +70,6 @@ HANDOFF_PATH = Path(
 def _cold_start_day_number() -> int | None:
     """Return ``N`` such that this is day ``N/7`` of the firehose, or
     ``None`` once the firehose is over.
-
-    Counts existing ``evwatch.digests`` rows. The next digest is day
-    ``count + 1``. Returns ``None`` once seven digests have already been
-    sent.
     """
     try:
         resp = (
@@ -75,8 +80,6 @@ def _cold_start_day_number() -> int | None:
             .execute()
         )
     except Exception:
-        # Don't let a Supabase blip block the email — fall back to no day
-        # number, which yields the steady-state subject.
         return None
     count = resp.count or 0
     if count >= 7:
@@ -84,12 +87,67 @@ def _cold_start_day_number() -> int | None:
     return count + 1
 
 
-def _subject(priority_count: int) -> str:
+def _plural(n: int, singular: str, plural: str | None = None) -> str:
+    return f"{n} {singular if n == 1 else (plural or singular + 's')}"
+
+
+def _subject(priority: int, deals: int, drops: int, total_new: int) -> str:
     day = _cold_start_day_number()
     if day is not None:
-        return f"[evwatch] day {day}/7 — {priority_count} new listings"
-    # Steady-state subject. Once drops/deals exist, this gets enriched.
-    return f"[evwatch] {priority_count} priority hit{'s' if priority_count != 1 else ''}"
+        return f"[evwatch] day {day}/7 — {total_new} new listings"
+    # Steady-state. Skip zero-count sections.
+    pieces: list[str] = []
+    if priority:
+        pieces.append(_plural(priority, "priority hit", "priority hits"))
+    if deals:
+        pieces.append(_plural(deals, "deal"))
+    if drops:
+        pieces.append(_plural(drops, "drop"))
+    if not pieces:
+        # Shouldn't happen — caller only ships if tagged is non-empty.
+        return "[evwatch] nothing new"
+    return f"[evwatch] {', '.join(pieces)}"
+
+
+# ---------------------------------------------------------------------------
+# Digest filtering
+# ---------------------------------------------------------------------------
+
+
+def _filter_for_digest(
+    tagged: list[TaggedListing], *, window_hours: int
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Bucket tagged listings into the three digest sections.
+
+    NEW_PRIORITY and BELOW_MARKET are restricted to first_seen_at in the
+    window (we don't email about the same below-market car every day).
+    PRICE_DROP is already filtered by detect_deals (latest observation in
+    window), so we just unwrap.
+    """
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=window_hours)
+
+    priority: list[dict] = []
+    deals: list[dict] = []
+    drops: list[dict] = []
+
+    for row, tags in tagged:
+        is_newly_seen = False
+        first_seen = row.get("first_seen_at")
+        if first_seen:
+            try:
+                t = dt.datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
+                is_newly_seen = t >= cutoff
+            except (ValueError, AttributeError):
+                pass
+
+        if NEW_PRIORITY in tags and is_newly_seen:
+            priority.append(row)
+        if BELOW_MARKET in tags and is_newly_seen:
+            deals.append({**row, "_below_market": tags[BELOW_MARKET]})
+        if PRICE_DROP in tags:
+            drops.append({**row, "_price_drop": tags[PRICE_DROP]})
+
+    return priority, deals, drops
 
 
 # ---------------------------------------------------------------------------
@@ -107,24 +165,31 @@ def _env_jinja() -> Environment:
 def render(
     tagged: list[TaggedListing],
     total_listings: int,
+    *,
+    window_hours: int = 24,
 ) -> dict[str, Any]:
-    """Render the digest. Returns ``{"subject", "html", "counts"}``."""
-    priority = [row for row, tags in tagged if NEW_PRIORITY in tags]
+    priority, deals, drops = _filter_for_digest(tagged, window_hours=window_hours)
 
     counts = {
         "priority": len(priority),
-        "drops": 0,  # phase 4+
-        "deals": 0,  # phase 5+
+        "deals":    len(deals),
+        "drops":    len(drops),
     }
+    total_new = sum(counts.values())
 
-    subject = _subject(counts["priority"])
+    subject = _subject(counts["priority"], counts["deals"], counts["drops"], total_new)
     today = dt.date.today().isoformat()
-    heading = (
-        f"{counts['priority']} new priority listing"
-        f"{'' if counts['priority'] == 1 else 's'}"
-        if counts["priority"]
-        else "No priority hits today"
-    )
+
+    if counts["priority"] and not counts["deals"] and not counts["drops"]:
+        heading = _plural(counts["priority"], "new priority listing")
+    elif total_new == 0:
+        heading = "No new activity"
+    else:
+        bits = []
+        if counts["priority"]: bits.append(_plural(counts["priority"], "priority hit", "priority hits"))
+        if counts["deals"]:    bits.append(_plural(counts["deals"], "below-market deal"))
+        if counts["drops"]:    bits.append(_plural(counts["drops"], "price drop"))
+        heading = " · ".join(bits)
 
     tmpl = _env_jinja().get_template(TEMPLATE_NAME)
     html = tmpl.render(
@@ -133,6 +198,8 @@ def render(
         today=today,
         year=dt.date.today().year,
         priority=priority,
+        deals=deals,
+        drops=drops,
         total_listings=total_listings,
         dashboard_url=DASHBOARD_URL,
     )
@@ -179,41 +246,84 @@ def _send_via_resend(subject: str, html: str) -> dict[str, Any]:
 
 
 def _stub_tagged() -> list[TaggedListing]:
-    fake = [
-        {
-            "id": "stub-1",
-            "source": "ebay",
-            "url": "https://example.com/stub-listing-1",
-            "make": "Kia",
-            "model": "EV9",
-            "trim": "Wind",
-            "year": 2024,
-            "mileage": 12_500,
-            "price": 48_900,
-            "vin": None,
-            "location": "Tacoma, WA, 98402",
-            "miles_from_port_orchard": 18,
-            "thumbnail_url": None,
-            "first_seen_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        },
-        {
-            "id": "stub-2",
-            "source": "ebay",
-            "url": "https://example.com/stub-listing-2",
-            "make": "Rivian",
-            "model": "R1S",
-            "trim": "Adventure",
-            "year": 2023,
-            "mileage": 24_100,
-            "price": 65_500,
-            "vin": None,
-            "location": "Portland, OR, 97214",
-            "miles_from_port_orchard": 142,
-            "thumbnail_url": None,
-            "first_seen_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        },
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    fake_priority = {
+        "id": "stub-1",
+        "source": "ebay",
+        "url": "https://example.com/stub-listing-1",
+        "make": "Kia",
+        "model": "EV9",
+        "trim": "Wind",
+        "year": 2024,
+        "mileage": 12_500,
+        "price": 48_900,
+        "vin": None,
+        "location": "Tacoma, WA, 98402",
+        "miles_from_port_orchard": 18,
+        "thumbnail_url": None,
+        "first_seen_at": now,
+    }
+    fake_deal = {
+        "id": "stub-2",
+        "source": "carmax",
+        "url": "https://example.com/stub-listing-2",
+        "make": "Tesla",
+        "model": "Model Y",
+        "trim": "Long Range",
+        "year": 2022,
+        "mileage": 34_800,
+        "price": 28_500,
+        "vin": "5YJ3E1EA0NF000001",
+        "location": "Lynnwood, WA",
+        "miles_from_port_orchard": 38,
+        "thumbnail_url": None,
+        "first_seen_at": now,
+    }
+    fake_drop = {
+        "id": "stub-3",
+        "source": "carvana",
+        "url": "https://example.com/stub-listing-3",
+        "make": "Ford",
+        "model": "Mustang Mach-E",
+        "trim": "Premium",
+        "year": 2023,
+        "mileage": 19_400,
+        "price": 31_200,
+        "vin": None,
+        "location": "Phoenix, AZ (ships to PNW)",
+        "miles_from_port_orchard": None,
+        "thumbnail_url": None,
+        "first_seen_at": (
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=4)
+        ).isoformat(),
+    }
+    return [
+        (fake_priority, {NEW_PRIORITY: {}}),
+        (
+            fake_deal,
+            {
+                BELOW_MARKET: {
+                    "pct_below": 0.182,
+                    "dollars_below": 6_350,
+                    "baseline_median": 34_850,
+                    "comp_count": 24,
+                }
+            },
+        ),
+        (
+            fake_drop,
+            {
+                PRICE_DROP: {
+                    "previous_price": 33_700,
+                    "delta": -2_500,
+                    "delta_pct": -0.074,
+                    "observed_at_previous": (
+                        dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=3)
+                    ).isoformat(),
+                }
+            },
+        ),
     ]
-    return [(row, [NEW_PRIORITY]) for row in fake]
 
 
 # ---------------------------------------------------------------------------
@@ -223,22 +333,10 @@ def _stub_tagged() -> list[TaggedListing]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render + send the evwatch digest.")
-    parser.add_argument(
-        "--stub",
-        action="store_true",
-        help="Use fake listings; skip Supabase. Useful for testing Resend.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Render + print the HTML to stdout; don't POST to Resend.",
-    )
-    parser.add_argument(
-        "--window-hours",
-        type=int,
-        default=24,
-        help="Look at listings first seen in the last N hours (default 24).",
-    )
+    parser.add_argument("--stub", action="store_true")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Render + print HTML; don't POST to Resend.")
+    parser.add_argument("--window-hours", type=int, default=24)
     args = parser.parse_args(argv)
 
     if args.stub:
@@ -258,11 +356,13 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             total_listings = 0
 
-    if not tagged and not args.stub:
+    # Pre-check: would the digest actually contain anything?
+    priority, deals, drops = _filter_for_digest(tagged, window_hours=args.window_hours)
+    if not (priority or deals or drops) and not args.stub:
         print("[send_digest] nothing to report — skipping send.")
         return 0
 
-    rendered = render(tagged, total_listings=total_listings)
+    rendered = render(tagged, total_listings=total_listings, window_hours=args.window_hours)
     print(f"[send_digest] subject: {rendered['subject']}")
     print(f"[send_digest] counts: {rendered['counts']}")
 

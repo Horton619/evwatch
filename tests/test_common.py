@@ -12,7 +12,12 @@ import importlib
 import pytest
 
 from scrapers import _common
-from scrapers._common import Listing, run_scraper
+from scrapers._common import (
+    Listing,
+    bucket_key,
+    mileage_bucket,
+    run_scraper,
+)
 
 
 def test_port_orchard_to_self_is_zero() -> None:
@@ -90,6 +95,51 @@ def test_run_scraper_dry_run_handles_scrape_exception(capsys) -> None:
     captured = capsys.readouterr()
     assert "scrape failed" in captured.err
     assert "scraped 0 listings" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# Bucketing for baselines
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "miles,expected",
+    [
+        (0,       "lt10k"),
+        (9_999,   "lt10k"),
+        (10_000,  "10k-20k"),
+        (35_500,  "30k-40k"),
+        (60_000,  "60k-80k"),
+        (79_999,  "60k-80k"),
+        (80_000,  "80kplus"),
+        (150_000, "80kplus"),
+    ],
+)
+def test_mileage_bucket_boundaries(miles: int, expected: str) -> None:
+    assert mileage_bucket(miles) == expected
+
+
+def test_mileage_bucket_rejects_missing_or_negative() -> None:
+    assert mileage_bucket(None) is None
+    assert mileage_bucket(-1) is None
+
+
+def test_bucket_key_happy_path() -> None:
+    assert bucket_key("Tesla", "Model Y", 2022, 35_000) == "tesla:model-y:2022:30k-40k:pnw"
+    assert bucket_key("Ford", "Mustang Mach-E", 2023, 18_000) == "ford:mustang-mach-e:2023:10k-20k:pnw"
+
+
+def test_bucket_key_returns_none_for_missing_inputs() -> None:
+    assert bucket_key(None, "Model Y", 2022, 35_000) is None
+    assert bucket_key("Tesla", None, 2022, 35_000) is None
+    assert bucket_key("Tesla", "Model Y", None, 35_000) is None
+    assert bucket_key("Tesla", "Model Y", 2022, None) is None
+
+
+def test_bucket_key_region_is_overridable() -> None:
+    assert bucket_key("Tesla", "Model Y", 2022, 35_000, region="national") == (
+        "tesla:model-y:2022:30k-40k:national"
+    )
 
 
 # ---------------------------------------------------------------------------

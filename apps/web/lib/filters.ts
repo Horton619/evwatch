@@ -6,14 +6,15 @@ import { getWatchlist } from "./watchlist";
 
 export const PAGE_SIZE = 50;
 
-export type Quick = "today" | "priority" | null;
+export type Quick = "today" | "priority" | "below_market" | "price_drop" | null;
 
 export type Sort =
   | "last_seen_desc"
   | "price_asc"
   | "price_desc"
   | "mileage_asc"
-  | "year_desc";
+  | "year_desc"
+  | "discount_desc";
 
 export interface Filters {
   make: string | null;
@@ -37,9 +38,10 @@ const VALID_SORTS: Sort[] = [
   "price_desc",
   "mileage_asc",
   "year_desc",
+  "discount_desc",
 ];
 
-const VALID_QUICKS: Quick[] = ["today", "priority"];
+const VALID_QUICKS: Quick[] = ["today", "priority", "below_market", "price_drop"];
 
 function asString(v: string | string[] | undefined): string | null {
   if (Array.isArray(v)) return v[0] ?? null;
@@ -119,11 +121,15 @@ export function hasAnyFilter(f: Filters): boolean {
 /* ------------------------------------------------------------------ */
 
 const SORT_COLUMN: Record<Sort, { col: string; asc: boolean }> = {
-  last_seen_desc: { col: "last_seen_at", asc: false },
-  price_asc:      { col: "price",        asc: true  },
-  price_desc:     { col: "price",        asc: false },
-  mileage_asc:    { col: "mileage",      asc: true  },
-  year_desc:      { col: "year",         asc: false },
+  last_seen_desc: { col: "last_seen_at",                       asc: false },
+  price_asc:      { col: "price",                              asc: true  },
+  price_desc:     { col: "price",                              asc: false },
+  mileage_asc:    { col: "mileage",                            asc: true  },
+  year_desc:      { col: "year",                               asc: false },
+  // PostgREST supports ordering by a JSONB path. Phase 5 sort by
+  // BELOW_MARKET.pct_below — listings without that tag fall to the bottom
+  // via nullsFirst:false.
+  discount_desc:  { col: "deal_tags->BELOW_MARKET->>pct_below", asc: false },
 };
 
 export interface ListingsResult {
@@ -163,6 +169,17 @@ export async function queryListings(f: Filters): Promise<ListingsResult> {
   if (f.quick === "today") {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     q = q.gte("first_seen_at", cutoff);
+  }
+
+  if (f.quick === "below_market") {
+    // GIN index on deal_tags makes this cheap. PostgREST translates `?`
+    // to JSONB key-existence via filter helpers; supabase-js exposes it
+    // as `.contains`. We use the raw `?` operator via a filter string.
+    q = q.filter("deal_tags", "cs", '{"BELOW_MARKET":{}}');
+  }
+
+  if (f.quick === "price_drop") {
+    q = q.filter("deal_tags", "cs", '{"PRICE_DROP":{}}');
   }
 
   if (f.quick === "priority") {

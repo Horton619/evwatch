@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import math
 import os
+import re
 import sys
 import time
 from dataclasses import asdict, dataclass, field
@@ -142,6 +143,67 @@ def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
     dlam = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
     return 2 * r_miles * math.asin(math.sqrt(a))
+
+
+# ---------------------------------------------------------------------------
+# Baseline bucketing (SPEC §5.3)
+# ---------------------------------------------------------------------------
+
+# Mileage buckets — slug → (lo, hi) where hi is exclusive. 60-80k is
+# double-wide on purpose: most listings cap at the watchlist's 80k limit so
+# we'd otherwise have a thin 60-70k bucket.
+_MILEAGE_BUCKETS: list[tuple[str, int, int]] = [
+    ("lt10k",   0,      10_000),
+    ("10k-20k", 10_000, 20_000),
+    ("20k-30k", 20_000, 30_000),
+    ("30k-40k", 30_000, 40_000),
+    ("40k-50k", 40_000, 50_000),
+    ("50k-60k", 50_000, 60_000),
+    ("60k-80k", 60_000, 80_000),
+    ("80kplus", 80_000, 10**9),
+]
+
+# v1 region. SPEC §6 accepts mixed-source baselines under a single region;
+# we keep the field in the key so a future split into ("pnw", "national")
+# doesn't require a schema change.
+DEFAULT_REGION = "pnw"
+
+
+def _slug(s: str) -> str:
+    """Lowercase, spaces+slashes → hyphens, strip non [a-z0-9-]."""
+    s = s.strip().lower()
+    s = re.sub(r"[\s/]+", "-", s)
+    return re.sub(r"[^a-z0-9-]", "", s)
+
+
+def mileage_bucket(mileage: int | None) -> str | None:
+    if mileage is None or mileage < 0:
+        return None
+    for slug, lo, hi in _MILEAGE_BUCKETS:
+        if lo <= mileage < hi:
+            return slug
+    return None  # unreachable given the catch-all 80kplus
+
+
+def bucket_key(
+    make: str | None,
+    model: str | None,
+    year: int | None,
+    mileage: int | None,
+    region: str = DEFAULT_REGION,
+) -> str | None:
+    """Build the model_key used by ``evwatch.baselines``.
+
+    Returns ``None`` when the listing can't be bucketed (missing year,
+    mileage, make, or model). Callers should skip baseline contribution
+    and BELOW_MARKET evaluation in that case.
+    """
+    if not make or not model or year is None:
+        return None
+    mb = mileage_bucket(mileage)
+    if mb is None:
+        return None
+    return f"{_slug(make)}:{_slug(model)}:{year}:{mb}:{region}"
 
 
 def miles_from_port_orchard(zip_code: str | None) -> int | None:

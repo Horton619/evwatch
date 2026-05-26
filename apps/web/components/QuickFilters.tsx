@@ -7,9 +7,11 @@ interface Props {
 }
 
 const CHIPS: Array<{ value: Quick | null; label: string }> = [
-  { value: null,       label: "All" },
-  { value: "today",    label: "New today" },
-  { value: "priority", label: "Priority hits" },
+  { value: null,            label: "All" },
+  { value: "today",         label: "New today" },
+  { value: "priority",      label: "Priority hits" },
+  { value: "below_market",  label: "Below market" },
+  { value: "price_drop",    label: "Price drops" },
 ];
 
 export function QuickFilters({ filters }: Props) {

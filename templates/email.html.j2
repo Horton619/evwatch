@@ -1,4 +1,4 @@
-{% macro render_card(item) -%}
+{% macro render_card(item, kind='priority') -%}
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#10141f;border:1px solid rgba(237,237,237,0.08);border-radius:8px;margin-bottom:12px;">
   <tr>
     <td style="width:120px;padding:12px;vertical-align:top;">
@@ -13,6 +13,26 @@
       <div style="font-size:20px;font-weight:600;color:#f97316;margin-top:4px;">
         {% if item.price %}${{ '{:,}'.format(item.price) }}{% else %}—{% endif %}
       </div>
+
+      {# Below-market delta — orange-ish #}
+      {% if kind == 'deal' and item._below_market %}
+      <div style="font-size:12px;color:#10b981;margin-top:4px;">
+        ${{ '{:,}'.format(item._below_market.dollars_below) }} below market
+        ({{ (item._below_market.pct_below * 100) | round(1) }}% under
+        ${{ '{:,}'.format(item._below_market.baseline_median) }} median,
+        {{ item._below_market.comp_count }} comps)
+      </div>
+      {% endif %}
+
+      {# Price drop delta — cyan-ish #}
+      {% if kind == 'drop' and item._price_drop %}
+      <div style="font-size:12px;color:#22d3ee;margin-top:4px;">
+        ${{ '{:,}'.format(item._price_drop.delta | abs) }}
+        ({{ (item._price_drop.delta_pct * 100) | round(1) }}%) from
+        ${{ '{:,}'.format(item._price_drop.previous_price) }}
+      </div>
+      {% endif %}
+
       <div style="font-size:13px;color:rgba(237,237,237,0.6);margin-top:6px;">
         {% if item.mileage %}{{ '{:,}'.format(item.mileage) }} mi{% else %}mileage unknown{% endif %}
         {% if item.miles_from_port_orchard is not none %} · {{ item.miles_from_port_orchard }} mi away{% endif %}
@@ -45,7 +65,25 @@
         Priority watchlist ({{ priority|length }})
       </h2>
       {% for item in priority %}
-        {{ render_card(item) }}
+        {{ render_card(item, kind='priority') }}
+      {% endfor %}
+      {% endif %}
+
+      {% if deals %}
+      <h2 style="font-size:14px;letter-spacing:0.15em;text-transform:uppercase;color:#10b981;margin:32px 0 12px 0;">
+        Below market ({{ deals|length }})
+      </h2>
+      {% for item in deals %}
+        {{ render_card(item, kind='deal') }}
+      {% endfor %}
+      {% endif %}
+
+      {% if drops %}
+      <h2 style="font-size:14px;letter-spacing:0.15em;text-transform:uppercase;color:#22d3ee;margin:32px 0 12px 0;">
+        Price drops ({{ drops|length }})
+      </h2>
+      {% for item in drops %}
+        {{ render_card(item, kind='drop') }}
       {% endfor %}
       {% endif %}
 
