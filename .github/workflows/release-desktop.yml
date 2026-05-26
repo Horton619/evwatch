@@ -7,6 +7,14 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  # electron-builder needs to create/update the GitHub release. Default
+  # GITHUB_TOKEN on new repos has contents:read only — without elevating,
+  # the publish step fails with HTTP 403 "Forbidden" during release
+  # cleanup. (Settings → Actions → General → "Workflow permissions" set
+  # to "Read repository contents" by default since late 2023.)
+  contents: write
+
 jobs:
   build-mac:
     runs-on: macos-14  # arm64 runner so we cross-build nothing
