@@ -34,7 +34,10 @@ mac:
   # error.)
   notarize: true
 dmg:
-  artifactName: ${name}-${version}-arm64.${ext}
+  # Use productName, NOT ${name} — package.json's name is the scoped
+  # workspace identifier @evwatch/desktop, and the / would land mid-path
+  # ("dist/@evwatch/desktop-...dmg") which dmgbuild then can't create.
+  artifactName: ${productName}-${version}-arm64.${ext}
 # Skipping Windows + Linux targets — evwatch is Mac-only (SPEC §5.7).
 npmRebuild: false
 publish:
