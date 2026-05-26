@@ -1,10 +1,14 @@
 {
   "name": "@evwatch/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "evwatch Mac desktop app — live view + scrape trigger",
   "main": "./out/main/index.js",
   "author": "Visual Entropy Productions",
   "homepage": "https://github.com/visualentropy/evwatch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/visualentropy/evwatch.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -22,7 +26,10 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
-    "@electron-toolkit/utils": "^4.0.0"
+    "@electron-toolkit/utils": "^4.0.0",
+    "@evwatch/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.47.0",
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -31,6 +38,7 @@
     "@types/node": "^22.19.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@tailwindcss/vite": "^4.0.0",
     "@vitejs/plugin-react": "^5.1.1",
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
@@ -42,6 +50,7 @@
     "prettier": "^3.7.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "tailwindcss": "^4.0.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.6"
   },

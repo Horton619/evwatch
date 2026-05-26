@@ -11,33 +11,32 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
-win:
-  executableName: evwatch
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
 mac:
-  entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
-linux:
+  category: public.app-category.utilities
+  # Both DMG (fresh installs) AND ZIP (electron-updater in-place swaps)
+  # are required — see "Auto-update" section of ~/.claude/CLAUDE.md.
+  # Missing the zip target means update downloads fail with
+  # "ZIP file not provided".
   target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements:        build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # electron-builder v24+ requires this explicitly; absent → notarize
+  # rejects with "teamId property is required". VEP-wide Team ID per
+  # global CLAUDE.md, hardcoded so a missing env var doesn't silently
+  # turn into an undefined teamId.
+  notarize:
+    teamId: L5KZ5KGKXC
+dmg:
+  artifactName: ${name}-${version}-arm64.${ext}
+# Skipping Windows + Linux targets — evwatch is Mac-only (SPEC §5.7).
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: visualentropy
+  repo: evwatch

@@ -25,6 +25,10 @@ __pycache__/
 *.egg-info/
 .eggs/
 build/
+# electron-builder uses apps/desktop/build/ for buildResources (icons +
+# entitlements). MUST be committed.
+!apps/desktop/build/
+!apps/desktop/build/**
 dist/
 .venv/
 venv/
