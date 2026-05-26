@@ -1,6 +1,6 @@
 {
   "name": "@evwatch/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "evwatch Mac desktop app — live view + scrape trigger",
   "main": "./out/main/index.js",
   "author": "Visual Entropy Productions",

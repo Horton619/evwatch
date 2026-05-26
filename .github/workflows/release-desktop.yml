@@ -56,4 +56,8 @@ jobs:
           : "${APPLE_ID:?APPLE_ID secret not set}"
           : "${APPLE_APP_SPECIFIC_PASSWORD:?APPLE_APP_SPECIFIC_PASSWORD secret not set}"
           : "${APPLE_TEAM_ID:?APPLE_TEAM_ID secret not set}"
+          # 1. Bundle main + preload + renderer to out/ (electron-builder
+          #    expects out/main/index.js to exist — it doesn't run vite).
+          pnpm exec electron-vite build
+          # 2. Sign + notarize + dmg/zip + publish to GitHub Releases.
           pnpm exec electron-builder --mac --publish always
